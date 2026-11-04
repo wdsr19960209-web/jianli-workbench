@@ -53,8 +53,13 @@ def _sheet_path(zf, wanted):
         if sheet.get("name") == wanted:
             rid = sheet.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
             target = rel_map.get(rid, "worksheets/sheet1.xml")
+            # Target 三种写法都要认：worksheets/sheet1.xml、
+            # /xl/worksheets/sheet1.xml（openpyxl 真实文件就是这种）、
+            # xl/worksheets/sheet1.xml。之前只认第一种，真实文件会拼成
+            # xl/xl/worksheets/sheet1.xml 导致整页读失败、显示 0 条。
+            target = target.lstrip("/")
             if not target.startswith("xl/"):
-                target = "xl/" + target.lstrip("/")
+                target = "xl/" + target
             return target
     return "xl/worksheets/sheet1.xml"
 
