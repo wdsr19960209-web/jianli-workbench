@@ -16,7 +16,9 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 for folder in ("安全", "工作台", "病害台账"):
     sys.path.insert(0, os.path.join(BASE, folder))
 
+import disease_excel  # noqa: E402
 import disease_live  # noqa: E402
+import disease_patrol  # noqa: E402
 import disease_status  # noqa: E402
 import instructions  # noqa: E402
 import overview  # noqa: E402
@@ -42,10 +44,29 @@ def load_env():
 
 ENV = load_env()
 PORT = int(ENV.get("PORT") or os.environ.get("PORT") or 8080)
-DB = os.path.join(BASE, ENV.get("WORKBENCH_DB") or "data/workbench.db")
-SAFETY_CSV = ENV.get("SAFETY_LEDGER_CSV") or os.path.join(
-    BASE, "data/examples/safety_example.csv")
-DISEASE_DIR = ENV.get("DISEASE_LEDGER_DIR") or os.path.join(BASE, "data/examples")
+# 路径里的 ~ 展开成用户主目录，这样 Mac 本地版 .env 里可以直接写 ~/Desktop/...。
+# 优先级：.env 文件 > 环境变量 > 默认示例路径。
+DB = os.path.expanduser(os.path.join(
+    BASE, ENV.get("WORKBENCH_DB") or os.environ.get("WORKBENCH_DB")
+    or "data/workbench.db"))
+SAFETY_CSV = os.path.expanduser(ENV.get("SAFETY_LEDGER_CSV")
+    or os.environ.get("SAFETY_LEDGER_CSV")
+    or os.path.join(BASE, "data/examples/safety_example.csv"))
+DISEASE_DIR = os.path.expanduser(ENV.get("DISEASE_LEDGER_DIR")
+    or os.environ.get("DISEASE_LEDGER_DIR")
+    or os.path.join(BASE, "data/examples"))
+
+
+def load_disease_month(month):
+    """月度病害优先读真实月度 xlsx（病害处置台账_YYYY-MM.xlsx），
+    没有 xlsx 时回落到示例 CSV。返回 (rows, note, is_xlsx)。"""
+    xlsx_rows, xlsx_note = disease_excel.read_month_xlsx(DISEASE_DIR, month)
+    if xlsx_rows or "读取失败" in xlsx_note:
+        return xlsx_rows, xlsx_note, True
+    if os.path.exists(os.path.join(DISEASE_DIR, "病害处置台账_%s.xlsx" % month)):
+        return xlsx_rows, xlsx_note, True
+    csv_rows, csv_note = disease_live.read_month_csv(DISEASE_DIR, month)
+    return csv_rows, csv_note, False
 
 
 def esc(value):
@@ -113,13 +134,19 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/disease":
             month = (query.get("month") or ["2026-11"])[0]
             show_closed = (query.get("show_closed") or ["0"])[0] == "1"
-            rows, note = disease_live.read_month_csv(DISEASE_DIR, month)
+            rows, note, _is_xlsx = load_disease_month(month)
             current_month = datetime.date.today().strftime("%Y-%m")
             is_current = month == current_month
-            hidden_rows = [r for r in rows
-                           if disease_status.should_hide(r, is_current)]
+
+            def _is_hidden(r):
+                # xlsx 里行隐藏标记和状态 5 按期完成规则，两边只要一边说藏就藏；
+                # 已完结月份：xlsx 本身已取消隐藏，should_hide 也返回 False。
+                return bool(r.get("_行已隐藏")) or \
+                    disease_status.should_hide(r, is_current)
+
+            hidden_rows = [r for r in rows if _is_hidden(r)]
             visible_rows = [r for r in rows
-                            if show_closed or not disease_status.should_hide(r, is_current)]
+                            if show_closed or not _is_hidden(r)]
             company_rows = []
             for r in visible_rows:
                 crow = disease_live.to_company_row(r)
@@ -173,16 +200,32 @@ class Handler(BaseHTTPRequestHandler):
                     "</select> 日期/月份：<input name='date' value='" + esc(label) + "'>"
                     " 关键词：<input name='q' value='" + esc(keyword) + "'>"
                     "<input type='submit' value='查看'></form>")
+            # 来自月度病害表的巡查统计：按巡查记录编号去重，只含发现病害的巡查。
+            month_label = label[:7]
+            d_rows, _d_note, _d_xlsx = load_disease_month(month_label)
+            d_stat = disease_patrol.summarize_from_diseases(d_rows, period, label)
+            d_per = "".join(
+                f"<tr><td>{esc(p)}</td><td>{v['patrols']}</td><td>{v['diseases']}</td></tr>"
+                for p, v in sorted(d_stat["per_person"].items()))
+            d_section = (
+                f"<h3>巡查统计（来自月度病害表，{'每日' if view == 'day' else '每月'}，{esc(label)}）</h3>"
+                f"<p class='note'>巡查次数（去重巡查记录编号）：{d_stat['patrols']} 次，"
+                f"发现病害：{d_stat['diseases']} 条。口径：月度病害表里只有发现了病害的巡查，"
+                "没发现病害的巡查不在表里，所以次数是下限，会比真实巡查次数少。"
+                "里程待接平台（病害记录里没有里程字段），这里不编造。</p>"
+                "<table><tr><th>巡查人</th><th>巡查次数（去重）</th><th>发现病害数</th></tr>"
+                + (d_per or "<tr><td colspan='3'>暂无数据</td></tr>")
+                + f"<tr><td><b>合计</b></td><td><b>{d_stat['patrols']}</b></td>"
+                f"<td><b>{d_stat['diseases']}</b></td></tr></table>")
             body = (form
-                    + f"<h3>巡查统计（{'每日' if view == 'day' else '每月'}，{esc(label)}）</h3>"
+                    + f"<h3>巡查统计（本机新增记录，{'每日' if view == 'day' else '每月'}，{esc(label)}）</h3>"
                     f"<p class='note'>巡查次数：{stat['total']} 次。"
-                    "巡查没有完成率，只看次数和轨迹，不算已完成和完成率。"
-                    "里程和发现病害数待接智养平台（里程字段名待确认，"
-                    "病害靠巡查记录编号关联），接通前不编造。</p>"
+                    "巡查没有完成率，只看次数和轨迹，不算已完成和完成率。</p>"
                     "<table><tr><th>巡查人</th><th>巡查次数</th></tr>"
                     + (per_person or "<tr><td colspan='2'>暂无数据</td></tr>")
                     + f"<tr><td><b>合计</b></td><td><b>{stat['total']}</b></td></tr></table>"
-                    "<h3>巡查记录（本机新增）</h3>"
+                    + d_section
+                    + "<h3>巡查记录（本机新增）</h3>"
                     + render.table(
                         ["id", "date", "route", "section", "recorder", "content"],
                         all_rows))

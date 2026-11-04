@@ -29,10 +29,14 @@ def should_hide(row, is_current_month):
     """只有当月、状态 5 且按期完成的行才隐藏；已完结月份全部显示。
 
     预览里“显示已闭环”展开，就相当于看一个已完结月份。
-    本骨架示例 CSV 里用“逾期状态”列判断是否按期：值为“未逾期”才算按期。
-    真实 Excel 接入时，按实际“是否按期完成”字段改这一处即可。
+    按期判断用“逾期状态”列：示例 CSV 里按期写“未逾期”，
+    真实月度 xlsx 里按期写空（脚本的 compute_overdue 只在逾期时写“逾期”），
+    所以空和“未逾期”都算按期；同时要求有处置完成日期，避免无日期的行被误藏。
     """
     if not is_current_month:
         return False
-    return str(row.get("状态码", "")).strip() == "5" and \
-        str(row.get("逾期状态", "")).strip() == "未逾期"
+    if str(row.get("状态码", "")).strip() != "5":
+        return False
+    if not str(row.get("处置完成日期", "")).strip():
+        return False
+    return str(row.get("逾期状态", "")).strip() in ("", "未逾期")
