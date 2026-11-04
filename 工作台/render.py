@@ -11,9 +11,10 @@ th{background:#f2f2f2}
 input,textarea,select{padding:6px;margin:4px 0}
 """
 
-NAV = ('<nav><a href="/">首页</a><a href="/safety">安全文件台账</a>'
-       '<a href="/disease">病害台账</a><a href="/patrol">巡查记录</a>'
-       '<a href="/issues">监理问题</a></nav><hr>')
+# 五个页签，与预览第四版起的结构一致：监理问题那页已去掉，不再出现在导航里。
+NAV = ('<nav><a href="/">首页 · 工程概括</a><a href="/patrol">巡查统计</a>'
+       '<a href="/safety">安全文件台账</a><a href="/disease">病害台账</a>'
+       '<a href="/instruction">监理指令</a></nav><hr>')
 
 
 def page(title, body):
