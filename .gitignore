@@ -1,0 +1,10 @@
+# 真实凭证、真实数据、本地数据库，一律不提交
+.env
+*.db
+*.db-journal
+__pycache__/
+*.pyc
+data/*
+!data/examples/
+!data/examples/*
+.DS_Store
