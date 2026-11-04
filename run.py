@@ -16,6 +16,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 for folder in ("安全", "工作台", "病害台账"):
     sys.path.insert(0, os.path.join(BASE, folder))
 
+import charts  # noqa: E402
 import disease_excel  # noqa: E402
 import disease_live  # noqa: E402
 import disease_patrol  # noqa: E402
@@ -27,6 +28,12 @@ import patrol_stats  # noqa: E402
 import render  # noqa: E402
 import safety_read  # noqa: E402
 import safety_status  # noqa: E402
+try:
+    # 本机版专用通讯录（含电话），只在 Mac 本地版文件夹里有；
+    # 公开版没有这个文件时，首页自动不显示通讯录，绝不因此报错。
+    import contacts_local  # noqa: E402
+except ImportError:
+    contacts_local = None
 
 
 def load_env():
@@ -82,17 +89,43 @@ def home_body():
         + f"工区：{esc(s['gongqu'])}</div>"
         for s in overview.SECTIONS)
     lines = "<br>".join(esc(x) for x in overview.GONGQU_LINES)
+    map_file = os.path.join(BASE, "管养路段示意图.png")
+    if os.path.exists(map_file):
+        map_block = ("<img src='/map.png' style='max-width:100%;border:1px solid #ccc'>"
+                     "<p class='note'>安阳分公司管养路段示意图（本机图片，仅本机可见）。</p>")
+    else:
+        map_block = ("<div style='border:2px dashed #ccc;border-radius:8px;padding:20px'>"
+                     "<b>安阳分公司管养路段示意图</b>"
+                     "<p class='note'>示意图原图是内部资料，不提交进公开库；"
+                     "把原图存为工作台文件夹里的“管养路段示意图.png”，"
+                     "这里就会自动显示出来。</p></div>")
+    contacts_block = ""
+    if contacts_local is not None:
+        # 本机版才有：监理通讯录、工区通讯录（含电话），公开版不显示。
+        sup = "".join(
+            f"<tr><td>{esc(c['name'])}</td><td>{esc(c['phone'])}</td>"
+            f"<td>{esc(c['scope'])}</td><td>{esc(c['note'])}</td></tr>"
+            for c in contacts_local.SUPERVISORS)
+        gong = "".join(
+            f"<tr><td>{esc(c['road'])}</td><td>{esc(c['stake'])}</td>"
+            f"<td>{esc(c['name'])}</td><td>{esc(c['phone'])}</td>"
+            f"<td>{esc(c['gongqu'])}</td></tr>"
+            for c in contacts_local.GONGQU_CONTACTS)
+        contacts_block = (
+            "<h3>安阳驻地办通讯录</h3>"
+            "<table><tr><th>姓名</th><th>电话</th><th>管辖路段</th><th>备注</th></tr>"
+            + sup + "</table>"
+            "<h3>安阳各工区通讯录</h3>"
+            "<table><tr><th>管辖路段</th><th>桩号</th><th>姓名</th><th>电话</th><th>工区</th></tr>"
+            + gong + "</table>"
+            "<p class='note'>通讯录只在本机版里，公开版没有，勿把本机版文件夹推到公开库。</p>")
     return (
         f"<h2>安阳驻地办 · 工程概括</h2>"
         f"<p class='note'>安阳分公司管养里程 {overview.TOTAL_MILEAGE_KM} 公里。</p>"
-        "<div style='border:2px dashed #ccc;border-radius:8px;padding:20px'>"
-        "<b>安阳分公司管养路段示意图</b>"
-        "<p class='note'>示意图原图是内部资料，不提交进公开库；"
-        "本地版需要时把图放本机，再改这一处。</p></div>"
-        f"<h3>各路段概括</h3>{cards}"
-        f"<h3>工区对照</h3><p>{lines}</p>"
-        "<p class='note'>本页只写路段、桩号、里程、工区结构，"
-        "不写通讯录里的姓名、电话；通讯录只放在聊天预览里。</p>")
+        + map_block
+        + f"<h3>各路段概括</h3>{cards}"
+        + f"<h3>工区对照</h3><p>{lines}</p>"
+        + contacts_block)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -124,9 +157,27 @@ class Handler(BaseHTTPRequestHandler):
             rows, note = safety_read.read_safety_ledger(SAFETY_CSV)
             example = "examples" in SAFETY_CSV
             note += "（当前为示例假数据）" if example else ""
+            # 归档预览：填了信息点“归档”后，只在当前页面多一行预览，
+            # 不写本机 CSV、不动在线表；正式归档仍走在线表。
+            preview_row = None
+            new_name = (query.get("new_name") or [""])[0]
+            if new_name.strip():
+                preview_row = {c: "" for c in safety_read.COLUMNS}
+                preview_row["序号"] = str(len(rows) + 1)
+                preview_row["文件名/通知摘要"] = new_name
+                preview_row["类型"] = (query.get("new_type") or [""])[0]
+                preview_row["文件日期/通知日期"] = (query.get("new_date") or [""])[0]
+                preview_row["处理状态"] = "待处理"
+                preview_row["备注"] = "预览行，未写入在线表"
+                rows = rows + [preview_row]
+            form = ("<form>文件名/通知摘要：<input name='new_name' size='40'> "
+                    "类型：<input name='new_type'> "
+                    "日期：<input name='new_date' placeholder='2026-11-05'> "
+                    "<input type='submit' value='归档（仅预览）'></form>")
             body = (f"<p class='note'>{esc(note)}</p>"
                     "<p class='note'>登记和改状态仍在在线表里做，这里只展示，不改数据。"
                     "安全台账的处理状态与病害状态码不是一回事，不能混用。</p>"
+                    + form
                     + render.table(safety_read.COLUMNS, rows,
                                    lambda r: safety_status.color_for(r.get("处理状态"))))
             return self._send(render.page("安全文件台账", body))
@@ -152,7 +203,23 @@ class Handler(BaseHTTPRequestHandler):
                 crow = disease_live.to_company_row(r)
                 code = crow["状态码"]
                 crow["状态码"] = f"{code}（{disease_status.text_for(code)}）"
+                # 出文档：点开就是监理指令页，问题一栏已按这行病害填好，
+                # 危害、依据、逾期留空给你填，不替你定。
+                problem = (f"{crow['路段名称']} {crow['桩号（位置）']} "
+                           f"{crow['幅别']} {crow['病害']} {crow['数量']}{crow['单位']}，"
+                           f"巡查人{crow['巡查人']}，整改措施{crow['整改措施']}，"
+                           f"整改时限{crow['整改时限']}")
+                from urllib.parse import quote
+                crow["操作"] = (f"<a href='/instruction?problem={quote(problem)}'>出文档</a>")
                 company_rows.append(crow)
+            daily_diseases, daily_patrols = charts.daily_counts(rows, month)
+            trend = (f"<h3>趋势图（{esc(month)}）</h3>"
+                     + charts.svg_bars(daily_diseases, "每日发现病害数")
+                     + charts.svg_bars(daily_patrols, "每日巡查次数（去重巡查记录编号）",
+                                       bar_color="#6aa84f")
+                     + "<h3>每人发现病害数</h3>"
+                     + charts.svg_bars(charts.per_person_discovered(rows, month),
+                                       "每人发现病害数", bar_color="#e69138"))
             legend = "<br>".join(
                 f"{k}：{v}" for k, v in disease_status.STATUS_TEXT.items())
             toggle = (f"<a href='/disease?month={esc(month)}&show_closed=0'>隐藏已闭环</a>"
@@ -170,9 +237,11 @@ class Handler(BaseHTTPRequestHandler):
                     f"<p class='note'>状态码规则：<br>{legend}</p>"
                     "<p class='note'>下面是公司在线表 12 列 + 状态码，"
                     "照这个顺序复制，正好一列对一列粘到公司在线表；"
-                    "病害下发方式在示例里没有字段，留“待填写”，不等用户定下统一填什么不擅自填。</p>"
+                    "病害下发方式在示例里没有字段，留“待填写”，不等用户定下统一填什么不擅自填。"
+                    "每行最后的“出文档”不参与复制，点开就是指令草稿。</p>"
+                    + trend
                     + render.table(
-                        disease_live.COMPANY_COLUMNS, company_rows,
+                        disease_live.COMPANY_COLUMNS + ["操作"], company_rows,
                         lambda r: disease_status.color_for(
                             str(r.get("状态码", ""))[:1])))
             return self._send(render.page(f"病害台账（{esc(month)}）", body))
@@ -204,6 +273,20 @@ class Handler(BaseHTTPRequestHandler):
             month_label = label[:7]
             d_rows, _d_note, _d_xlsx = load_disease_month(month_label)
             d_stat = disease_patrol.summarize_from_diseases(d_rows, period, label)
+            d_daily_diseases, d_daily_patrols = charts.daily_counts(d_rows, month_label)
+            trend = (f"<h3>趋势图（{esc(month_label)}，来自月度病害表）</h3>"
+                     + charts.svg_bars(d_daily_diseases, "每日发现病害数")
+                     + charts.svg_bars(d_daily_patrols, "每日巡查次数（去重巡查记录编号）",
+                                       bar_color="#6aa84f"))
+            report = ""
+            if (query.get("report") or ["0"])[0] == "1":
+                report_lines = [f"巡查报告（{esc(label)}）",
+                                f"巡查次数（去重，仅含发现病害的巡查）：{d_stat['patrols']} 次",
+                                f"发现病害：{d_stat['diseases']} 条",
+                                "里程：待接平台（病害记录里没有里程字段）"]
+                for p, v in sorted(d_stat["per_person"].items()):
+                    report_lines.append(f"{p}：巡查 {v['patrols']} 次，发现病害 {v['diseases']} 条")
+                report = "<pre>" + "\n".join(report_lines) + "</pre>"
             d_per = "".join(
                 f"<tr><td>{esc(p)}</td><td>{v['patrols']}</td><td>{v['diseases']}</td></tr>"
                 for p, v in sorted(d_stat["per_person"].items()))
@@ -217,7 +300,10 @@ class Handler(BaseHTTPRequestHandler):
                 + (d_per or "<tr><td colspan='3'>暂无数据</td></tr>")
                 + f"<tr><td><b>合计</b></td><td><b>{d_stat['patrols']}</b></td>"
                 f"<td><b>{d_stat['diseases']}</b></td></tr></table>")
+            report_link = (f"<a href='/patrol?view={esc(view)}&date={esc(label)}&report=1'>"
+                           "生成巡查报告</a>")
             body = (form
+                    + trend
                     + f"<h3>巡查统计（本机新增记录，{'每日' if view == 'day' else '每月'}，{esc(label)}）</h3>"
                     f"<p class='note'>巡查次数：{stat['total']} 次。"
                     "巡查没有完成率，只看次数和轨迹，不算已完成和完成率。</p>"
@@ -225,6 +311,7 @@ class Handler(BaseHTTPRequestHandler):
                     + (per_person or "<tr><td colspan='2'>暂无数据</td></tr>")
                     + f"<tr><td><b>合计</b></td><td><b>{stat['total']}</b></td></tr></table>"
                     + d_section
+                    + f"<p>{report_link}</p>" + report
                     + "<h3>巡查记录（本机新增）</h3>"
                     + render.table(
                         ["id", "date", "route", "section", "recorder", "content"],
@@ -240,19 +327,43 @@ class Handler(BaseHTTPRequestHandler):
             if problem or hazard or basis or overdue:
                 draft = instructions.build_instruction(problem, hazard, basis, {}, overdue)
             form = ("<form>"
-                    "巡查发现的问题：<br><textarea name='problem' rows='2' cols='80'>"
+                    "巡查发现的问题：<br><textarea name='problem' rows='4' cols='60'>"
                     + esc(problem) + "</textarea><br>"
-                    "危害后果：<br><textarea name='hazard' rows='2' cols='80'>"
+                    "危害后果：<br><textarea name='hazard' rows='2' cols='60'>"
                     + esc(hazard) + "</textarea><br>"
-                    "合同 / 规范依据：<br><textarea name='basis' rows='2' cols='80'>"
+                    "合同 / 规范依据：<br><textarea name='basis' rows='2' cols='60'>"
                     + esc(basis) + "</textarea><br>"
-                    "逾期责任：<br><textarea name='overdue' rows='2' cols='80'>"
+                    "逾期责任：<br><textarea name='overdue' rows='2' cols='60'>"
                     + esc(overdue) + "</textarea><br>"
                     "<input type='submit' value='生成指令草稿'></form>")
-            body = (form
-                    + "<p class='note'>只套既有模板格式，不替你定责任，缺的留空。</p>"
-                    + (f"<pre>{esc(draft)}</pre>" if draft else ""))
+            # 左填右预览：左边填，右边实时出草稿，病害页“出文档”带过来的问题已填在左边。
+            body = ("<div style='display:flex;gap:20px;align-items:flex-start'>"
+                    f"<div style='flex:1'>{form}</div>"
+                    "<div style='flex:1;border:1px solid #ccc;padding:12px'>"
+                    "<h3>预览</h3>"
+                    "<p class='note'>只套既有模板格式，不替你定责任，缺的留空。</p>"
+                    + (f"<pre style='white-space:pre-wrap'>{esc(draft)}</pre>" if draft else
+                       "<p class='note'>左边填完点“生成指令草稿”，草稿出现在这里。</p>")
+                    + "</div></div>")
             return self._send(render.page("监理指令", body))
+
+        if path == "/map.png":
+            # 本机图片：工作台文件夹里有“管养路段示意图.png”才返回，否则 404，
+            # 首页自动退回占位说明。图片本身不提交进公开库。
+            map_file = os.path.join(BASE, "管养路段示意图.png")
+            if os.path.exists(map_file):
+                with open(map_file, "rb") as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"not found")
+            return
 
         self.send_response(404)
         self.end_headers()
