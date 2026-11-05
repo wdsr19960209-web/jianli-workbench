@@ -3,9 +3,11 @@
 # 数据全部来自调用方传进来的真实台账行，缺数据时返回空串，不画假图。
 
 
-def svg_bars(pairs, title, bar_color="#4472c4", width=720, height=180):
+def svg_bars(pairs, title, bar_color="#4472c4", width=680, height=140):
     """pairs 为 [(标签, 数值), ...]，数值<=0 的也画（高度为 0 的基线）。
-    标签过长时只显示后 5 个字，避免挤在一起。"""
+    标签过长时只显示后 5 个字，避免挤在一起。
+    图改小一点、少占地方：高度由 180 改成 140；上边距由 20 改成 28，
+    让最高柱子的数值标签不跟标题挤在一起。"""
     pairs = [(str(label), int(value)) for label, value in pairs]
     if not pairs:
         return ""
@@ -13,7 +15,7 @@ def svg_bars(pairs, title, bar_color="#4472c4", width=720, height=180):
     n = len(pairs)
     slot = width / n
     bar_w = max(4.0, slot * 0.6)
-    top, bottom = 20, height - 24
+    top, bottom = 28, height - 24
     plot_h = bottom - top
     parts = [f"<svg width='{width}' height='{height}' "
              f"style='background:#fafafa;border:1px solid #ddd'>",
@@ -27,7 +29,9 @@ def svg_bars(pairs, title, bar_color="#4472c4", width=720, height=180):
         if value:
             parts.append(f"<text x='{x + bar_w / 2:.1f}' y='{y - 3:.1f}' "
                          f"font-size='11' text-anchor='middle'>{value}</text>")
-        short = label[-5:] if len(label) > 5 else label
+        # 标签短的（如 2026-11、11-04、人名）原样显示；只有过长的才截后 5 字，
+        # 否则每月趋势的“2026-11”会被截成“26-11”，看着像年份丢了。
+        short = label[-5:] if len(label) > 8 else label
         parts.append(f"<text x='{x + bar_w / 2:.1f}' y='{height - 6}' "
                      f"font-size='11' text-anchor='middle'>{short}</text>")
     parts.append("</svg>")
@@ -53,8 +57,15 @@ def daily_counts(rows, month):
             [(d, len(patrols[d])) for d in days])
 
 
+# 监理人员 8 人（只有姓名，没有电话）：每人发现病害数图里 8 人都要显示，
+# 当月没发现病害的也显示 0，不只显示有数据的几个人。
+PERSONNEL = ["姜付磊", "裴彤宇", "刘聪飞", "张永广",
+             "逯付江", "张振伟", "王明超", "王清顺"]
+
+
 def per_person_discovered(rows, month):
-    """每人发现病害数（第二十四版小图只剩这一张，已处置图已删）。"""
+    """每人发现病害数（第二十四版小图只剩这一张，已处置图已删）。
+    返回 8 名监理人员全员（含 0 条的），再加数据里出现过的其他人。"""
     from collections import Counter
     counts = Counter()
     for r in rows:
@@ -62,4 +73,7 @@ def per_person_discovered(rows, month):
         person = str(r.get("巡查人", "")).strip()
         if date.startswith(month) and person:
             counts[person] += 1
-    return sorted(counts.items())
+    out = [(name, counts.get(name, 0)) for name in PERSONNEL]
+    out += [(name, counts[name]) for name in sorted(counts)
+            if name not in PERSONNEL]
+    return out

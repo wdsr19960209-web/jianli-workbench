@@ -23,8 +23,6 @@ import disease_patrol  # noqa: E402
 import disease_status  # noqa: E402
 import instructions  # noqa: E402
 import overview  # noqa: E402
-import patrol_records  # noqa: E402
-import patrol_stats  # noqa: E402
 import render  # noqa: E402
 import safety_read  # noqa: E402
 import safety_status  # noqa: E402
@@ -222,17 +220,19 @@ class Handler(BaseHTTPRequestHandler):
                                        "每人发现病害数", bar_color="#e69138"))
             legend = "<br>".join(
                 f"{k}：{v}" for k, v in disease_status.STATUS_TEXT.items())
-            toggle = (f"<a href='/disease?month={esc(month)}&show_closed=0'>隐藏已闭环</a>"
+            # 取消隐藏按钮：点开显示全部已隐藏行，方便整表复制到其他表格；
+            # 显示之后点“恢复隐藏”回到默认只看未闭环的状态。
+            toggle = (f"<a href='/disease?month={esc(month)}&show_closed=0'>"
+                      "<button type='button'>恢复隐藏</button></a>"
                       if show_closed else
                       f"<a href='/disease?month={esc(month)}&show_closed=1'>"
-                      "显示已闭环（状态5）</a>")
+                      "<button type='button'>取消隐藏</button></a>")
             body = (f"<p class='note'>{esc(note)}</p>"
                     f"<form>月份：<input name='month' value='{esc(month)}'>"
                     "<input type='submit' value='查看'></form>"
                     f"<p class='note'>共 {len(rows)} 条，"
                     f"隐藏 {len(hidden_rows)} 条"
-                    "（仅当月、状态 5 且按期完成才隐藏，已完结月份全显；"
-                    "点“显示已闭环”就相当于看完结月份）。"
+                    "（仅当月、状态 5 且按期完成才隐藏，已完结月份全显）。"
                     f" {toggle}</p>"
                     f"<p class='note'>状态码规则：<br>{legend}</p>"
                     "<p class='note'>下面是公司在线表 12 列 + 状态码，"
@@ -247,75 +247,64 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(render.page(f"病害台账（{esc(month)}）", body))
 
         if path == "/patrol":
+            # 巡查页只做两件事：上面查询 + 趋势，下面接巡查记录台账。
+            # 新增巡查记录、本机新增统计、本机新增记录表、生成巡查报告都已去掉。
+            # 巡查次数只按巡查记录编号去重算，不算发现病害数，不算完成率。
             view = (query.get("view") or ["day"])[0]
+            if view not in ("day", "month"):
+                view = "day"
             label = (query.get("date") or ["2026-11-04"])[0]
             keyword = (query.get("q") or [""])[0]
-            all_rows = patrol_records.list_patrol(DB, keyword)
-            period = "month" if view == "month" else "day"
-            stat_rows = patrol_stats.filter_by_period(all_rows, period, label)
-            stat = patrol_stats.summarize(stat_rows, period)
-            per_person = "".join(
-                f"<tr><td>{esc(p)}</td><td>{c}</td></tr>"
-                for p, c in sorted(stat["per_person"].items()))
-            form = ("<form method='post' action='/patrol/add'>"
-                    "日期：<input name='date' placeholder='2026-11-04'> "
-                    "路线：<input name='route'> 路段：<input name='section'> "
-                    "记录人：<input name='recorder'><br>"
-                    "内容：<textarea name='content' rows='3' cols='80'></textarea><br>"
-                    "<input type='submit' value='新增巡查记录'></form><hr>"
-                    "<form>时间范围：<select name='view'>"
-                    "<option value='day'" + (" selected" if view == "day" else "") + ">每日</option>"
-                    "<option value='month'" + (" selected" if view == "month" else "") + ">每月</option>"
-                    "</select> 日期/月份：<input name='date' value='" + esc(label) + "'>"
-                    " 关键词：<input name='q' value='" + esc(keyword) + "'>"
-                    "<input type='submit' value='查看'></form>")
-            # 来自月度病害表的巡查统计：按巡查记录编号去重，只含发现病害的巡查。
             month_label = label[:7]
+            if view == "month":
+                label = month_label
+            day_label = label if len(label) == 10 else month_label + "-01"
+            # 每日 / 每月用按钮切换，不用下拉框。
+            toggle = (
+                f"<a href='/patrol?view=day&date={esc(day_label)}&q={esc(keyword)}'>"
+                f"<button type='button'{' disabled' if view == 'day' else ''}>每日</button></a> "
+                f"<a href='/patrol?view=month&date={esc(month_label)}&q={esc(keyword)}'>"
+                f"<button type='button'{' disabled' if view == 'month' else ''}>每月</button></a>")
+            form = (f"<p>{toggle}</p>"
+                    "<form>日期/月份：<input name='date' value='" + esc(label) + "'>"
+                    " 关键词（巡查人/路段/记录编号）：<input name='q' value='" + esc(keyword) + "'>"
+                    f"<input type='hidden' name='view' value='{view}'>"
+                    "<input type='submit' value='查看'></form>")
             d_rows, _d_note, _d_xlsx = load_disease_month(month_label)
-            d_stat = disease_patrol.summarize_from_diseases(d_rows, period, label)
-            d_daily_diseases, d_daily_patrols = charts.daily_counts(d_rows, month_label)
-            trend = (f"<h3>趋势图（{esc(month_label)}，来自月度病害表）</h3>"
-                     + charts.svg_bars(d_daily_diseases, "每日发现病害数")
-                     + charts.svg_bars(d_daily_patrols, "每日巡查次数（去重巡查记录编号）",
-                                       bar_color="#6aa84f"))
-            report = ""
-            if (query.get("report") or ["0"])[0] == "1":
-                report_lines = [f"巡查报告（{esc(label)}）",
-                                f"巡查次数（去重，仅含发现病害的巡查）：{d_stat['patrols']} 次",
-                                f"发现病害：{d_stat['diseases']} 条",
-                                "里程：待接平台（病害记录里没有里程字段）"]
-                for p, v in sorted(d_stat["per_person"].items()):
-                    report_lines.append(f"{p}：巡查 {v['patrols']} 次，发现病害 {v['diseases']} 条")
-                report = "<pre>" + "\n".join(report_lines) + "</pre>"
-            d_per = "".join(
-                f"<tr><td>{esc(p)}</td><td>{v['patrols']}</td><td>{v['diseases']}</td></tr>"
-                for p, v in sorted(d_stat["per_person"].items()))
-            d_section = (
-                f"<h3>巡查统计（来自月度病害表，{'每日' if view == 'day' else '每月'}，{esc(label)}）</h3>"
-                f"<p class='note'>巡查次数（去重巡查记录编号）：{d_stat['patrols']} 次，"
-                f"发现病害：{d_stat['diseases']} 条。口径：月度病害表里只有发现了病害的巡查，"
-                "没发现病害的巡查不在表里，所以次数是下限，会比真实巡查次数少。"
-                "里程待接平台（病害记录里没有里程字段），这里不编造。</p>"
-                "<table><tr><th>巡查人</th><th>巡查次数（去重）</th><th>发现病害数</th></tr>"
-                + (d_per or "<tr><td colspan='3'>暂无数据</td></tr>")
-                + f"<tr><td><b>合计</b></td><td><b>{d_stat['patrols']}</b></td>"
-                f"<td><b>{d_stat['diseases']}</b></td></tr></table>")
-            report_link = (f"<a href='/patrol?view={esc(view)}&date={esc(label)}&report=1'>"
-                           "生成巡查报告</a>")
+            if view == "day":
+                # 每日：趋势是当月每天的巡查次数，台账是当天的巡查记录。
+                _daily_diseases, daily_patrols = charts.daily_counts(d_rows, month_label)
+                trend = (f"<h3>趋势图（{esc(month_label)}，每日巡查次数）</h3>"
+                         + charts.svg_bars(daily_patrols, "每日巡查次数（去重巡查记录编号）",
+                                           bar_color="#6aa84f"))
+                ledger = disease_patrol.patrol_ledger(d_rows, "day", label, keyword)
+                total_patrols = len(ledger)
+                total_diseases = sum(r["发现病害数"] for r in ledger)
+            else:
+                # 每月：趋势是各月的巡查次数，台账是当月的巡查记录。
+                monthly_pairs = []
+                for m in disease_patrol.monthly_patrol_counts(DISEASE_DIR):
+                    m_rows, _m_note, _m_xlsx = load_disease_month(m)
+                    m_stat = disease_patrol.summarize_from_diseases(m_rows, "month", m)
+                    monthly_pairs.append((m, m_stat["patrols"]))
+                trend = ("<h3>趋势图（各月巡查次数）</h3>"
+                         + charts.svg_bars(monthly_pairs, "每月巡查次数（去重巡查记录编号）",
+                                           bar_color="#6aa84f"))
+                ledger = disease_patrol.patrol_ledger(d_rows, "month", month_label, keyword)
+                total_patrols = len(ledger)
+                total_diseases = sum(r["发现病害数"] for r in ledger)
+            ledger_rows = ledger + [{"发现日期": "合计", "巡查人": "", "路段名称": "",
+                                    "巡查记录编号": f"共 {total_patrols} 次",
+                                    "发现病害数": total_diseases}]
             body = (form
                     + trend
-                    + f"<h3>巡查统计（本机新增记录，{'每日' if view == 'day' else '每月'}，{esc(label)}）</h3>"
-                    f"<p class='note'>巡查次数：{stat['total']} 次。"
-                    "巡查没有完成率，只看次数和轨迹，不算已完成和完成率。</p>"
-                    "<table><tr><th>巡查人</th><th>巡查次数</th></tr>"
-                    + (per_person or "<tr><td colspan='2'>暂无数据</td></tr>")
-                    + f"<tr><td><b>合计</b></td><td><b>{stat['total']}</b></td></tr></table>"
-                    + d_section
-                    + f"<p>{report_link}</p>" + report
-                    + "<h3>巡查记录（本机新增）</h3>"
-                    + render.table(
-                        ["id", "date", "route", "section", "recorder", "content"],
-                        all_rows))
+                    + f"<h3>巡查记录台账（{'每日' if view == 'day' else '每月'}，{esc(label)}）</h3>"
+                    "<p class='note'>只统计巡查次数（去重巡查记录编号），不算完成率。"
+                    "口径：月度病害表里只有发现了病害的巡查，没发现病害的巡查不在表里，"
+                    "所以次数是下限，会比真实巡查次数少。里程待接平台（病害记录里没有里程字段），"
+                    "这里不编造。</p>"
+                    + render.table(["发现日期", "巡查人", "路段名称", "巡查记录编号", "发现病害数"],
+                                   ledger_rows))
             return self._send(render.page("巡查统计", body))
 
         if path == "/instruction":
@@ -370,14 +359,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b"not found")
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length") or 0)
-        fields = {k: v[0] for k, v in
-                  parse_qs(self.rfile.read(length).decode("utf-8")).items()}
-        if self.path == "/patrol/add":
-            patrol_records.add_patrol(DB, fields.get("date", ""), fields.get("route", ""),
-                                      fields.get("section", ""), fields.get("recorder", ""),
-                                      fields.get("content", ""))
-            return self._redirect("/patrol")
+        # 新增巡查记录功能已去掉，POST 统一返回 404，不再写本地数据库。
         self.send_response(404)
         self.end_headers()
 
