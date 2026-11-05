@@ -202,17 +202,28 @@ class Handler(BaseHTTPRequestHandler):
                 code = crow["状态码"]
                 crow["状态码"] = f"{code}（{disease_status.text_for(code)}）"
                 company_rows.append(crow)
-            daily_diseases, daily_patrols = charts.daily_counts(rows, month)
+            daily_diseases, _daily_patrols = charts.daily_counts(rows, month)
             # 当月状态码统计：放每人图右边空白处，0/3/4/5 各多少条、占当月多少比例。
+            # 0/3/4/5 四行永远显示（含 0 条的也显示 0），再加数据里出现过的其它码
+            # （比如状态码还没填的空行），这样各行加起来一定等于总数，不会再出现
+            # 合计 9 条、下面几行只加到 6 条的情况。
+            from collections import Counter
             total = len(rows)
+            code_counts = Counter()
+            for r in rows:
+                key = str(r.get("状态码", "")).strip()[:1] or "未填"
+                code_counts[key] += 1
+            ordered_codes = ["0", "3", "4", "5"] + [
+                c for c in sorted(code_counts)
+                if c not in ("0", "3", "4", "5")]
             stat_lines = []
-            for code in ("0", "3", "4", "5"):
-                count = sum(1 for r in rows
-                            if str(r.get("状态码", "")).strip()[:1] == code)
+            for code in ordered_codes:
+                count = code_counts.get(code, 0)
                 pct = f"{count / total * 100:.1f}%" if total else "0.0%"
+                meaning = disease_status.text_for(code) if code != "未填" else "状态码未填"
                 stat_lines.append(
-                    f"<tr><td>{code}</td>"
-                    f"<td>{esc(disease_status.text_for(code))}</td>"
+                    f"<tr><td>{esc(code)}</td>"
+                    f"<td>{esc(meaning)}</td>"
                     f"<td>{count}</td><td>{pct}</td></tr>")
             status_stat = (
                 f"<div><h3>当月状态码统计（共 {total} 条）</h3>"
@@ -221,18 +232,16 @@ class Handler(BaseHTTPRequestHandler):
                 + "".join(stat_lines)
                 + f"<tr><td><b>合计</b></td><td></td><td><b>{total}</b></td>"
                 f"<td><b>{'100.0%' if total else '0.0%'}</b></td></tr></tbody></table></div>")
+            # 病害页不再统计巡查次数：巡查次数只在巡查页统计，这里只留发现病害数。
             trend = (f"<h3>趋势图（{esc(month)}）</h3>"
                      + charts.svg_bars(daily_diseases, "每日发现病害数")
-                     + charts.svg_bars(daily_patrols, "每日巡查次数（去重巡查记录编号）",
-                                       bar_color="#6aa84f")
                      + "<div style='display:flex;gap:20px;align-items:flex-start'>"
                      "<div><h3>每人发现病害数</h3>"
                      + charts.svg_bars(charts.per_person_discovered(rows, month),
                                        "每人发现病害数", bar_color="#e69138")
                      + "</div>" + status_stat + "</div>")
-            # 状态码规则注释：只写一行，紧贴在台账表头上面，往下翻时跟表头一起冻结。
-            legend = "状态码规则：" + "；".join(
-                f"{k}={v}" for k, v in disease_status.STATUS_TEXT.items())
+            # 状态码规则注释已删：上面状态码统计表里已有含义一列，注释是多余的。
+            # 表头冻结仍保留（thead sticky），往下翻时表头停在顶部不动。
             # 取消隐藏按钮：点开显示全部已隐藏行，方便整表复制到其他表格；
             # 显示之后点“恢复隐藏”回到默认只看未闭环的状态。
             toggle = (f"<a href='/disease?month={esc(month)}&show_closed=0'>"
@@ -248,7 +257,6 @@ class Handler(BaseHTTPRequestHandler):
                     "（仅当月、状态 5 且按期完成才隐藏，已完结月份全显）。"
                     f" {toggle}</p>"
                     + trend
-                    + f"<div class='sticky-note'>{esc(legend)}</div>"
                     + render.table(
                         disease_live.COMPANY_COLUMNS + ["巡查记录编号"], company_rows,
                         lambda r: disease_status.color_for(

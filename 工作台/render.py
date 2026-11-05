@@ -34,9 +34,7 @@ input[type=submit],button{padding:8px 16px;border:none;border-radius:8px;
 input[type=submit]:hover,button:hover{background:#1d4ed8}
 button:disabled{background:#9ca3af;cursor:default}
 pre{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:14px;overflow:auto}
-thead th{position:sticky;top:36px;z-index:2}
-.sticky-note{position:sticky;top:0;background:#fff;z-index:3;padding:6px 0;
-  font-size:13px;color:#374151;border-bottom:1px solid #e5e7eb}
+thead th{position:sticky;top:0;z-index:2}
 """
 
 # 五个页签，与预览第四版起的结构一致：监理问题那页已去掉，不再出现在导航里。
