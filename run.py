@@ -233,13 +233,18 @@ class Handler(BaseHTTPRequestHandler):
                 + f"<tr><td><b>合计</b></td><td></td><td><b>{total}</b></td>"
                 f"<td><b>{'100.0%' if total else '0.0%'}</b></td></tr></tbody></table></div>")
             # 病害页不再统计巡查次数：巡查次数只在巡查页统计，这里只留发现病害数。
+            # 界面协调：趋势图拉满内容宽（1100），不再左边一小块、右边空一大块；
+            # 每人图加高到 210，与右边统计表（标题 + 6 行）的高度齐平，底对齐；
+            # 统计表拉满剩余宽度，不再缩在右边一小条。
             trend = (f"<h3>趋势图（{esc(month)}）</h3>"
-                     + charts.svg_bars(daily_diseases, "每日发现病害数")
+                     + charts.svg_bars(daily_diseases, "每日发现病害数", width=1100)
                      + "<div style='display:flex;gap:20px;align-items:flex-start'>"
                      "<div><h3>每人发现病害数</h3>"
                      + charts.svg_bars(charts.per_person_discovered(rows, month),
-                                       "每人发现病害数", bar_color="#e69138")
-                     + "</div>" + status_stat + "</div>")
+                                       "每人发现病害数", bar_color="#e69138",
+                                       width=640, height=210)
+                     + "</div>"
+                     + "<div style='flex:1'>" + status_stat + "</div></div>")
             # 状态码规则注释已删：上面状态码统计表里已有含义一列，注释是多余的。
             # 表头冻结仍保留（thead sticky），往下翻时表头停在顶部不动。
             # 取消隐藏按钮：点开显示全部已隐藏行，方便整表复制到其他表格；
@@ -293,7 +298,7 @@ class Handler(BaseHTTPRequestHandler):
                 _daily_diseases, daily_patrols = charts.daily_counts(d_rows, month_label)
                 trend = (f"<h3>趋势图（{esc(month_label)}，每日巡查次数）</h3>"
                          + charts.svg_bars(daily_patrols, "每日巡查次数（去重巡查记录编号）",
-                                           bar_color="#6aa84f"))
+                                           bar_color="#6aa84f", width=1100))
                 ledger = disease_patrol.patrol_ledger(d_rows, "day", label, keyword)
                 total_patrols = len(ledger)
                 total_diseases = sum(r["发现病害数"] for r in ledger)
@@ -306,7 +311,7 @@ class Handler(BaseHTTPRequestHandler):
                     monthly_pairs.append((m, m_stat["patrols"]))
                 trend = ("<h3>趋势图（各月巡查次数）</h3>"
                          + charts.svg_bars(monthly_pairs, "每月巡查次数（去重巡查记录编号）",
-                                           bar_color="#6aa84f"))
+                                           bar_color="#6aa84f", width=1100))
                 ledger = disease_patrol.patrol_ledger(d_rows, "month", month_label, keyword)
                 total_patrols = len(ledger)
                 total_diseases = sum(r["发现病害数"] for r in ledger)
