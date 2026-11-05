@@ -7,6 +7,7 @@
 
 import datetime
 import html
+import json
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -379,6 +380,48 @@ class Handler(BaseHTTPRequestHandler):
                         f"<pre style='white-space:pre-wrap'>{esc(shown[1])}</pre>")
                 elif links:
                     example_block = "<p>" + " ｜ ".join(links) + "</p>"
+            # 监理指令台账：只在 Mac 本地版有 data/instruction_ledger.json 时才显示，
+            # 台账数据（编号、标题、正文）全在那个文件里，run.py 里只有表头和查看逻辑，
+            # 不含任何真实指令内容，所以这段代码可以进公开库。公开版没有这个文件时，
+            # 指令页就是原来的填表 + 示例，不多出空台账。
+            # 流程：你在聊天里发大概内容，助理成稿、你点头后，助理把成稿续进这个台账。
+            ledger_block = ""
+            ledger_path = os.path.join(BASE, "data", "instruction_ledger.json")
+            if os.path.exists(ledger_path):
+                try:
+                    with open(ledger_path, encoding="utf-8") as f:
+                        ledger = json.load(f).get("instructions", [])
+                except Exception:
+                    ledger = []
+                if ledger:
+                    ledger_rows = []
+                    for i, item in enumerate(ledger):
+                        ledger_rows.append({
+                            "序号": str(i + 1),
+                            "编号": esc(item.get("编号", "")),
+                            "标题": esc(item.get("标题", "")),
+                            "致": esc(item.get("致", "")),
+                            "签发人": esc(item.get("签发人", "")),
+                            "签发日期": esc(item.get("签发日期", "")),
+                            "备注": esc(item.get("备注", "")),
+                            "全文": f"<a href='/instruction?doc={i}'>查看全文</a>",
+                        })
+                    ledger_block = (
+                        "<h3>监理指令台账</h3>"
+                        "<p class='note'>已归档的指令都在这里，点查看全文看正文；"
+                        "新指令成稿后由助理续进台账。</p>"
+                        + render.table(
+                            ["序号", "编号", "标题", "致", "签发人", "签发日期",
+                             "备注", "全文"], ledger_rows))
+                    doc_idx = (query.get("doc") or [""])[0]
+                    if doc_idx.isdigit() and int(doc_idx) < len(ledger):
+                        item = ledger[int(doc_idx)]
+                        ledger_block += (
+                            f"<h3>{esc(item.get('编号', ''))} "
+                            f"{esc(item.get('标题', ''))}</h3>"
+                            f"<pre style='white-space:pre-wrap'>"
+                            f"{esc(item.get('正文', ''))}</pre>"
+                            "<p><a href='/instruction'>回指令页</a></p>")
             # 左填右预览：左边填，右边实时出草稿，病害页“出文档”带过来的问题已填在左边。
             body = ("<div style='display:flex;gap:20px;align-items:flex-start'>"
                     f"<div style='flex:1'>{form}</div>"
@@ -387,7 +430,7 @@ class Handler(BaseHTTPRequestHandler):
                     "<p class='note'>只套既有模板格式，不替你定责任，缺的留空。</p>"
                     + (f"<pre style='white-space:pre-wrap'>{esc(draft)}</pre>" if draft else
                        "<p class='note'>左边填完点“生成指令草稿”，草稿出现在这里。</p>")
-                    + "</div></div>" + example_block)
+                    + "</div></div>" + example_block + ledger_block)
             return self._send(render.page("监理指令", body))
 
         if path == "/map.png":
