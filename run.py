@@ -196,11 +196,12 @@ class Handler(BaseHTTPRequestHandler):
             hidden_rows = [r for r in rows if _is_hidden(r)]
             visible_rows = [r for r in rows
                             if show_closed or not _is_hidden(r)]
+            # 状态码只显示数字：括号里的含义上面统计表里已有含义一列，表里再写是多余的。
+            # 首列加序号：按当前显示的行顺序从 1 编起（取消隐藏后全显时也一样顺延）。
             company_rows = []
-            for r in visible_rows:
+            for i, r in enumerate(visible_rows, 1):
                 crow = disease_live.to_company_row(r)
-                code = crow["状态码"]
-                crow["状态码"] = f"{code}（{disease_status.text_for(code)}）"
+                crow["序号"] = str(i)
                 company_rows.append(crow)
             daily_diseases, _daily_patrols = charts.daily_counts(rows, month)
             # 当月状态码统计：放每人图右边空白处，0/3/4/5 各多少条、占当月多少比例。
@@ -263,9 +264,11 @@ class Handler(BaseHTTPRequestHandler):
                     f" {toggle}</p>"
                     + trend
                     + render.table(
-                        disease_live.COMPANY_COLUMNS + ["巡查记录编号"], company_rows,
+                        ["序号"] + disease_live.COMPANY_COLUMNS + ["巡查记录编号"],
+                        company_rows,
                         lambda r: disease_status.color_for(
-                            str(r.get("状态码", ""))[:1])))
+                            str(r.get("状态码", ""))[:1]),
+                        cls="grid"))
             return self._send(render.page(f"病害台账（{esc(month)}）", body))
 
         if path == "/patrol":

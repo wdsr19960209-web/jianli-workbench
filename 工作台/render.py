@@ -25,6 +25,8 @@ table{border-collapse:collapse;width:100%;margin-top:12px;background:#fff;
 th,td{padding:9px 10px;text-align:center;vertical-align:middle;word-break:break-word;
   border-bottom:1px solid #eef2f7;font-size:14px}
 th{background:#f8fafc;color:#374151;font-weight:600}
+table.grid{border-radius:0}
+table.grid th,table.grid td{border:1px solid #cbd5e1}
 tr:hover{background:#f9fafb}
 .note{color:#6b7280;font-size:13px}
 input,textarea,select{padding:8px 10px;margin:4px 0;border:1px solid #d1d5db;
@@ -65,7 +67,9 @@ def page(title, body):
             f"{_nav(title)}<main class='wrap'><h1>{title}</h1>{body}</main></body></html>")
 
 
-def table(headers, rows, row_color=None):
+def table(headers, rows, row_color=None, cls=""):
+    # cls="grid"：WPS 式全边框（纵横线都有），只给要求全边框的表用，别处表不动。
+    cls_attr = f" class='{cls}'" if cls else ""
     head = "".join(f"<th>{h}</th>" for h in headers)
     body = ""
     for row in rows:
@@ -76,4 +80,4 @@ def table(headers, rows, row_color=None):
     if not rows:
         body = f"<tr><td colspan='{len(headers)}'>暂无数据</td></tr>"
     # 表头放进 thead，配合 CSS 里的 sticky：往下翻页时表头停在顶部不动。
-    return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+    return f"<table{cls_attr}><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
