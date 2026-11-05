@@ -32,6 +32,14 @@ try:
     import contacts_local  # noqa: E402
 except ImportError:
     contacts_local = None
+try:
+    # 本机版专用已有指令示例（含真实指令正文），只在 Mac 本地版文件夹里有；
+    # 公开版没有这个文件时，指令页自动不显示示例入口，绝不因此报错。
+    # 示例本身（标题、正文）全在 local_examples.py 里，run.py 里只有示例编号和
+    # 选取逻辑，不含任何真实指令内容，所以这段代码可以进公开库。
+    import local_examples  # noqa: E402
+except ImportError:
+    local_examples = None
 
 
 def load_env():
@@ -350,6 +358,27 @@ class Handler(BaseHTTPRequestHandler):
                     "逾期责任：<br><textarea name='overdue' rows='2' cols='60'>"
                     + esc(overdue) + "</textarea><br>"
                     "<input type='submit' value='生成指令草稿'></form>")
+            # 本地已有指令示例：只在 Mac 本地版有 local_examples.py 时才显示入口，
+            # 示例列表（编号、标题、正文）全由那个文件提供，公开版看不到。
+            example_block = ""
+            if local_examples is not None:
+                examples = getattr(local_examples, "EXAMPLES", [])
+                selected = (query.get("example") or [""])[0]
+                shown = None
+                links = []
+                for key, label, text in examples:
+                    links.append(
+                        f"<a href='/instruction?example={key}'>"
+                        f"看本地已有指令示例（{esc(label)}）</a>")
+                    if selected == key:
+                        shown = (label, text)
+                if shown:
+                    example_block = (
+                        f"<h3>本地已有指令示例（{esc(shown[0])}）</h3>"
+                        "<p class='note'>仅对照格式用，不替换你现在用的指令模板。</p>"
+                        f"<pre style='white-space:pre-wrap'>{esc(shown[1])}</pre>")
+                elif links:
+                    example_block = "<p>" + " ｜ ".join(links) + "</p>"
             # 左填右预览：左边填，右边实时出草稿，病害页“出文档”带过来的问题已填在左边。
             body = ("<div style='display:flex;gap:20px;align-items:flex-start'>"
                     f"<div style='flex:1'>{form}</div>"
@@ -358,7 +387,7 @@ class Handler(BaseHTTPRequestHandler):
                     "<p class='note'>只套既有模板格式，不替你定责任，缺的留空。</p>"
                     + (f"<pre style='white-space:pre-wrap'>{esc(draft)}</pre>" if draft else
                        "<p class='note'>左边填完点“生成指令草稿”，草稿出现在这里。</p>")
-                    + "</div></div>")
+                    + "</div></div>" + example_block)
             return self._send(render.page("监理指令", body))
 
         if path == "/map.png":
