@@ -94,6 +94,8 @@ def home_body():
         f"margin:8px;display:inline-block;vertical-align:top;width:280px'>"
         f"<b>{esc(s['road'])}</b><br>桩号：{esc(s['stake'])}<br>"
         + (f"管养里程：{s['mileage']} 公里<br>" if s["mileage"] else "")
+        + (f"通车时间：{esc(s['opened'])}<br>" if s.get("opened") else "")
+        + (f"双幅车道数：{s['lanes']}<br>" if s.get("lanes") else "")
         + f"工区：{esc(s['gongqu'])}</div>"
         for s in overview.SECTIONS)
     lines = "<br>".join(esc(x) for x in overview.GONGQU_LINES)
