@@ -246,15 +246,21 @@ class Handler(BaseHTTPRequestHandler):
                 f"<td><b>{'100.0%' if total else '0.0%'}</b></td></tr></tbody></table></div>")
             # 病害页不再统计巡查次数：巡查次数只在巡查页统计，这里只留发现病害数。
             # 界面协调：趋势图拉满内容宽（1100），不再左边一小块、右边空一大块；
-            # 每人图加高到 210，与右边统计表（标题 + 6 行）的高度齐平，底对齐；
             # 统计表拉满剩余宽度，不再缩在右边一小条。
+            # 两边底对齐：每人图高度不再写死 210，改成按右边统计表的实际行数算
+            # （表头 1 行 + 状态码行 + 合计 1 行；行高约 41：字 14 号行高 1.6、
+            # 上下内边距各 9、边框 1，再加表格上边距 12 与边框 2），
+            # 这样哪天多一行“未填”之类的，图跟着长高，底边还是齐平的。
+            # 两边各有一个 h3 标题，高度相同，不用再算。
+            stat_rows = 1 + len(stat_lines) + 1
+            person_height = 14 + 41 * stat_rows
             trend = (f"<h3>趋势图（{esc(month)}）</h3>"
                      + charts.svg_bars(daily_diseases, "每日发现病害数", width=1100)
                      + "<div style='display:flex;gap:20px;align-items:flex-start'>"
                      "<div><h3>每人发现病害数</h3>"
                      + charts.svg_bars(charts.per_person_discovered(rows, month),
                                        "每人发现病害数", bar_color="#e69138",
-                                       width=640, height=210)
+                                       width=640, height=person_height)
                      + "</div>"
                      + "<div style='flex:1'>" + status_stat + "</div></div>")
             # 状态码规则注释已删：上面状态码统计表里已有含义一列，注释是多余的。
