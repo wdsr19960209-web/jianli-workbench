@@ -201,25 +201,38 @@ class Handler(BaseHTTPRequestHandler):
                 crow = disease_live.to_company_row(r)
                 code = crow["状态码"]
                 crow["状态码"] = f"{code}（{disease_status.text_for(code)}）"
-                # 出文档：点开就是监理指令页，问题一栏已按这行病害填好，
-                # 危害、依据、逾期留空给你填，不替你定。
-                problem = (f"{crow['路段名称']} {crow['桩号（位置）']} "
-                           f"{crow['幅别']} {crow['病害']} {crow['数量']}{crow['单位']}，"
-                           f"巡查人{crow['巡查人']}，整改措施{crow['整改措施']}，"
-                           f"整改时限{crow['整改时限']}")
-                from urllib.parse import quote
-                crow["操作"] = (f"<a href='/instruction?problem={quote(problem)}'>出文档</a>")
                 company_rows.append(crow)
             daily_diseases, daily_patrols = charts.daily_counts(rows, month)
+            # 当月状态码统计：放每人图右边空白处，0/3/4/5 各多少条、占当月多少比例。
+            total = len(rows)
+            stat_lines = []
+            for code in ("0", "3", "4", "5"):
+                count = sum(1 for r in rows
+                            if str(r.get("状态码", "")).strip()[:1] == code)
+                pct = f"{count / total * 100:.1f}%" if total else "0.0%"
+                stat_lines.append(
+                    f"<tr><td>{code}</td>"
+                    f"<td>{esc(disease_status.text_for(code))}</td>"
+                    f"<td>{count}</td><td>{pct}</td></tr>")
+            status_stat = (
+                f"<div><h3>当月状态码统计（共 {total} 条）</h3>"
+                "<table><thead><tr><th>状态码</th><th>含义</th>"
+                "<th>条数</th><th>占比</th></tr></thead><tbody>"
+                + "".join(stat_lines)
+                + f"<tr><td><b>合计</b></td><td></td><td><b>{total}</b></td>"
+                f"<td><b>{'100.0%' if total else '0.0%'}</b></td></tr></tbody></table></div>")
             trend = (f"<h3>趋势图（{esc(month)}）</h3>"
                      + charts.svg_bars(daily_diseases, "每日发现病害数")
                      + charts.svg_bars(daily_patrols, "每日巡查次数（去重巡查记录编号）",
                                        bar_color="#6aa84f")
-                     + "<h3>每人发现病害数</h3>"
+                     + "<div style='display:flex;gap:20px;align-items:flex-start'>"
+                     "<div><h3>每人发现病害数</h3>"
                      + charts.svg_bars(charts.per_person_discovered(rows, month),
-                                       "每人发现病害数", bar_color="#e69138"))
-            legend = "<br>".join(
-                f"{k}：{v}" for k, v in disease_status.STATUS_TEXT.items())
+                                       "每人发现病害数", bar_color="#e69138")
+                     + "</div>" + status_stat + "</div>")
+            # 状态码规则注释：只写一行，紧贴在台账表头上面，往下翻时跟表头一起冻结。
+            legend = "状态码规则：" + "；".join(
+                f"{k}={v}" for k, v in disease_status.STATUS_TEXT.items())
             # 取消隐藏按钮：点开显示全部已隐藏行，方便整表复制到其他表格；
             # 显示之后点“恢复隐藏”回到默认只看未闭环的状态。
             toggle = (f"<a href='/disease?month={esc(month)}&show_closed=0'>"
@@ -234,14 +247,10 @@ class Handler(BaseHTTPRequestHandler):
                     f"隐藏 {len(hidden_rows)} 条"
                     "（仅当月、状态 5 且按期完成才隐藏，已完结月份全显）。"
                     f" {toggle}</p>"
-                    f"<p class='note'>状态码规则：<br>{legend}</p>"
-                    "<p class='note'>下面是公司在线表 12 列 + 状态码，"
-                    "照这个顺序复制，正好一列对一列粘到公司在线表；"
-                    "病害下发方式在示例里没有字段，留“待填写”，不等用户定下统一填什么不擅自填。"
-                    "每行最后的“出文档”不参与复制，点开就是指令草稿。</p>"
                     + trend
+                    + f"<div class='sticky-note'>{esc(legend)}</div>"
                     + render.table(
-                        disease_live.COMPANY_COLUMNS + ["操作"], company_rows,
+                        disease_live.COMPANY_COLUMNS + ["巡查记录编号"], company_rows,
                         lambda r: disease_status.color_for(
                             str(r.get("状态码", ""))[:1])))
             return self._send(render.page(f"病害台账（{esc(month)}）", body))

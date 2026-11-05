@@ -7,6 +7,8 @@ nav a{margin-right:16px}
 table{border-collapse:collapse;width:100%;table-layout:auto;margin-top:12px}
 th,td{border:1px solid #ccc;padding:8px;text-align:center;vertical-align:middle;word-break:break-word}
 th{background:#f2f2f2}
+thead th{position:sticky;top:36px;z-index:2}
+.sticky-note{position:sticky;top:0;background:#fff;z-index:3;padding:6px 0}
 .note{color:#666;font-size:14px}
 input,textarea,select{padding:6px;margin:4px 0}
 """
@@ -33,4 +35,5 @@ def table(headers, rows, row_color=None):
         body += f"<tr{style}>{cells}</tr>"
     if not rows:
         body = f"<tr><td colspan='{len(headers)}'>暂无数据</td></tr>"
-    return f"<table><tr>{head}</tr>{body}</table>"
+    # 表头放进 thead，配合 CSS 里的 sticky：往下翻页时表头停在顶部不动。
+    return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
