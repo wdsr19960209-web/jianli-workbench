@@ -19,15 +19,30 @@ def svg_bars(pairs, title, bar_color="#4472c4", width=680, height=140):
     plot_h = bottom - top
     parts = [f"<svg width='{width}' height='{height}' "
              f"style='background:#fff;border:1px solid #e5e7eb;border-radius:8px'>",
+             # 慢慢涨特效：纯 CSS，不引 JS、不引外部文件，离线也能跑。
+             # 柱子从底座往上长：transform-box 必须定在柱子自身、原点在底部，
+             # 否则 SVG 默认以整个画布左上角为原点，柱子会斜着长。
+             # 一根接一根错开 0.07 秒，像波浪一样涨；顶上的数字晚 0.35 秒淡入；
+             # 系统开了“减弱动态效果”时自动关掉特效。
+             "<style>.bar{transform-box:fill-box;transform-origin:bottom;"
+             "animation:bargrow .8s cubic-bezier(.22,1,.36,1) both}"
+             "@keyframes bargrow{from{transform:scaleY(0);opacity:0}"
+             "to{transform:scaleY(1);opacity:1}}"
+             ".vlab{animation:fadein .4s ease both}"
+             "@keyframes fadein{from{opacity:0}to{opacity:1}}"
+             "@media (prefers-reduced-motion:reduce){.bar,.vlab{animation:none}}"
+             "</style>",
              f"<text x='8' y='14' font-size='13'>{title}</text>"]
     for i, (label, value) in enumerate(pairs):
         x = slot * i + (slot - bar_w) / 2
         h = plot_h * value / max_value
         y = bottom - h
-        parts.append(f"<rect x='{x:.1f}' y='{y:.1f}' width='{bar_w:.1f}' "
+        parts.append(f"<rect class='bar' style='animation-delay:{i * 0.07:.2f}s' "
+                     f"x='{x:.1f}' y='{y:.1f}' width='{bar_w:.1f}' "
                      f"height='{h:.1f}' fill='{bar_color}'/>")
         if value:
-            parts.append(f"<text x='{x + bar_w / 2:.1f}' y='{y - 3:.1f}' "
+            parts.append(f"<text class='vlab' style='animation-delay:{i * 0.07 + 0.35:.2f}s' "
+                         f"x='{x + bar_w / 2:.1f}' y='{y - 3:.1f}' "
                          f"font-size='11' text-anchor='middle'>{value}</text>")
         # 标签短的（如 2026-11、11-04、人名）原样显示；只有过长的才截后 5 字，
         # 否则每月趋势的“2026-11”会被截成“26-11”，看着像年份丢了。
