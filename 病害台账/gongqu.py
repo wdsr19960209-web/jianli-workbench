@@ -19,11 +19,20 @@ ANLUO_SPLIT_KM = 58.748  # K58+748
 
 
 def _stake_km(stake):
-    """把 K58+748、K100+000、57.856 这类桩号换算成公里数，算不出来返回 None。"""
-    match = re.search(r"K?(\d+)(?:\+(\d+))?", str(stake or ""))
+    """把 K58+748、K100+000、57.856 这类桩号换算成公里数，算不出来返回 None。
+    平台桩号多为十进制公里数（57.856、58.800），必须先按浮点数解析，
+    否则 58.800 会被当成 58，K58+748 分界就失效了。"""
+    s = str(stake or "").strip()
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    match = re.search(r"K?(\d+)(?:\+(\d+))?", s)
     if not match:
         return None
-    km = int(match.group(1))
+    km = float(match.group(1))
     if match.group(2):
         km += int(match.group(2)) / 1000
     return km
