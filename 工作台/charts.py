@@ -18,7 +18,7 @@ def svg_bars(pairs, title, bar_color="#4472c4", width=680, height=140):
     top, bottom = 28, height - 24
     plot_h = bottom - top
     parts = [f"<svg width='{width}' height='{height}' "
-             f"style='background:#fafafa;border:1px solid #ddd'>",
+             f"style='background:#fff;border:1px solid #e5e7eb;border-radius:8px'>",
              f"<text x='8' y='14' font-size='13'>{title}</text>"]
     for i, (label, value) in enumerate(pairs):
         x = slot * i + (slot - bar_w) / 2
