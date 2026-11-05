@@ -23,7 +23,7 @@ h3{font-size:16px;margin:26px 0 10px;padding-left:10px;border-left:4px solid #25
 table{border-collapse:collapse;width:100%;margin-top:12px;background:#fff;
   border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
 th,td{padding:9px 10px;text-align:center;vertical-align:middle;word-break:break-word;
-  border-bottom:1px solid #eef2f7;font-size:14px}
+  border:1px solid #cbd5e1;font-size:14px}
 th{background:#f8fafc;color:#374151;font-weight:600}
 table.grid{border-radius:0}
 table.grid th,table.grid td{border:1px solid #cbd5e1}
