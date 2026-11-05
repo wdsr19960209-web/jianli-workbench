@@ -190,7 +190,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(render.page("安全文件台账", body))
 
         if path == "/disease":
-            month = (query.get("month") or ["2026-11"])[0]
+            # 默认月份取当天所在月，不再写死 2026-11，下个月打开还是当月。
+            month = (query.get("month") or
+                     [datetime.date.today().strftime("%Y-%m")])[0]
             show_closed = (query.get("show_closed") or ["0"])[0] == "1"
             rows, note, _is_xlsx = load_disease_month(month)
             current_month = datetime.date.today().strftime("%Y-%m")
@@ -287,7 +289,10 @@ class Handler(BaseHTTPRequestHandler):
             view = (query.get("view") or ["day"])[0]
             if view not in ("day", "month"):
                 view = "day"
-            label = (query.get("date") or ["2026-11-04"])[0]
+            # 默认日期取当天（服务器本地日期），不再写死 2026-11-04：
+            # 以前不带日期打开巡查页，永远看到的是 11 月 4 日那天的记录。
+            label = (query.get("date") or
+                     [datetime.date.today().isoformat()])[0]
             keyword = (query.get("q") or [""])[0]
             month_label = label[:7]
             if view == "month":
