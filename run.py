@@ -22,6 +22,7 @@ import disease_excel  # noqa: E402
 import disease_live  # noqa: E402
 import disease_patrol  # noqa: E402
 import disease_status  # noqa: E402
+import patrol_excel  # noqa: E402
 import instructions  # noqa: E402
 import overview  # noqa: E402
 import render  # noqa: E402
@@ -316,26 +317,40 @@ class Handler(BaseHTTPRequestHandler):
                     f"<input type='hidden' name='view' value='{view}'>"
                     "<input type='submit' value='查看'></form>")
             d_rows, _d_note, _d_xlsx = load_disease_month(month_label)
+            # 巡查优先读采集脚本单独写的月度巡查台账（有病害没病害的巡查都在里面）；
+            # 巡查台账文件还没生成时，回落到按病害表推导的老口径（那时没病害的巡查不在内）。
+            p_rows, _p_note, p_found = patrol_excel.read_patrol_month(DISEASE_DIR, month_label)
             if view == "day":
                 # 每日：趋势是当月每天的巡查次数，台账是当天的巡查记录。
-                _daily_diseases, daily_patrols = charts.daily_counts(d_rows, month_label)
+                if p_found:
+                    daily_patrols = disease_patrol.daily_patrol_counts(p_rows, month_label)
+                    ledger = disease_patrol.ledger_from_patrol_rows(p_rows, "day", label, keyword)
+                else:
+                    _daily_diseases, daily_patrols = charts.daily_counts(d_rows, month_label)
+                    ledger = disease_patrol.patrol_ledger(d_rows, "day", label, keyword)
                 trend = (f"<h3>趋势图（{esc(month_label)}，每日巡查次数）</h3>"
                          + charts.svg_bars(daily_patrols, "每日巡查次数（去重巡查记录编号）",
                                            bar_color="#6aa84f", width=1100))
-                ledger = disease_patrol.patrol_ledger(d_rows, "day", label, keyword)
                 total_patrols = len(ledger)
                 total_diseases = sum(r["发现病害数"] for r in ledger)
             else:
                 # 每月：趋势是各月的巡查次数，台账是当月的巡查记录。
                 monthly_pairs = []
                 for m in disease_patrol.monthly_patrol_counts(DISEASE_DIR):
-                    m_rows, _m_note, _m_xlsx = load_disease_month(m)
-                    m_stat = disease_patrol.summarize_from_diseases(m_rows, "month", m)
+                    m_p_rows, _m_p_note, m_p_found = patrol_excel.read_patrol_month(DISEASE_DIR, m)
+                    if m_p_found:
+                        m_stat = disease_patrol.summarize_from_patrol_rows(m_p_rows, "month", m)
+                    else:
+                        m_rows, _m_note, _m_xlsx = load_disease_month(m)
+                        m_stat = disease_patrol.summarize_from_diseases(m_rows, "month", m)
                     monthly_pairs.append((m, m_stat["patrols"]))
                 trend = ("<h3>趋势图（各月巡查次数）</h3>"
                          + charts.svg_bars(monthly_pairs, "每月巡查次数（去重巡查记录编号）",
                                            bar_color="#6aa84f", width=1100))
-                ledger = disease_patrol.patrol_ledger(d_rows, "month", month_label, keyword)
+                if p_found:
+                    ledger = disease_patrol.ledger_from_patrol_rows(p_rows, "month", month_label, keyword)
+                else:
+                    ledger = disease_patrol.patrol_ledger(d_rows, "month", month_label, keyword)
                 total_patrols = len(ledger)
                 total_diseases = sum(r["发现病害数"] for r in ledger)
             ledger_rows = ledger + [{"发现日期": "合计", "巡查人": "", "路段名称": "",
@@ -345,9 +360,13 @@ class Handler(BaseHTTPRequestHandler):
                     + trend
                     + f"<h3>巡查记录台账（{'每日' if view == 'day' else '每月'}，{esc(label)}）</h3>"
                     "<p class='note'>只统计巡查次数（去重巡查记录编号），不算完成率。"
-                    "口径：月度病害表里只有发现了病害的巡查，没发现病害的巡查不在表里，"
-                    "所以次数是下限，会比真实巡查次数少。里程待接平台（病害记录里没有里程字段），"
-                    "这里不编造。</p>"
+                    + ("口径：巡查台账由采集脚本每 15 分钟从平台同步，"
+                       "8 名监理的巡查全在里面（含未发现病害的）。"
+                       if p_found else
+                       "口径：巡查台账文件尚未生成，暂按月度病害表推导——"
+                       "月度病害表里只有发现了病害的巡查，没发现病害的巡查不在表里，"
+                       "所以次数是下限，会比真实巡查次数少。")
+                    + "里程待接平台（巡查记录里没有里程字段），这里不编造。</p>"
                     + render.table(["发现日期", "巡查人", "路段名称", "巡查记录编号", "发现病害数"],
                                    ledger_rows))
             return self._send(render.page("巡查统计", body))
