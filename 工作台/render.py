@@ -28,16 +28,35 @@ th{background:#f8fafc;color:#374151;font-weight:600}
 table.grid{border-radius:0}
 table.grid th,table.grid td{border:1px solid #cbd5e1}
 tr:hover{background:#f9fafb}
-/* 首页路段卡片动效（motion-prompt #081 悬停上浮、#074 淡入上浮，手写纯 CSS，不引外部文件）：
-   悬停上浮 10px / 0.3s ease-out，阴影 blur 6→22、y 2→12、透明度 .08→.22；
-   入场 0.7s ease-out，透明度 0→1、从下方 28px 升起，逐张延迟 0.07s。
-   animation 用 backwards 填充：动画结束后不占 transform，悬停上浮才生效。 */
-.seccard{box-shadow:0 2px 6px rgba(28,35,51,.08);
-  transition:transform .3s cubic-bezier(.22,1,.36,1),box-shadow .3s cubic-bezier(.22,1,.36,1);
-  animation:cardIn .7s cubic-bezier(.22,1,.36,1) backwards}
-.seccard:hover{transform:translateY(-10px);box-shadow:0 12px 22px rgba(28,35,51,.22)}
-@keyframes cardIn{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
-@media (prefers-reduced-motion: reduce){.seccard{animation:none;transition:none}}
+/* 总览条：7 格等宽，数字上下对齐 */
+.stats{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin:16px 0 22px}
+.stat{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px}
+.stat b{display:block;font-size:20px;color:#111827;white-space:nowrap}
+.stat span{font-size:13px;color:#6b7280}
+/* 路段折叠行：标题行 8 列固定网格，8 段上下对齐；纯 HTML details/summary，不用 JS。
+   入场逐行 0.07s 延迟、0.5s 从下方 12px 升起淡入（motion-prompt #074 的参数收敛版）；
+   展开内容 0.3s 淡入；箭头展开时旋转 90°。 */
+details.sec{background:#fff;border:1px solid #e5e7eb;border-radius:8px;margin:0 0 10px;overflow:hidden;
+  animation:rowIn .5s cubic-bezier(.22,1,.36,1) backwards}
+details.sec summary{list-style:none;cursor:pointer;display:grid;
+  grid-template-columns:22px minmax(180px,1.25fr) minmax(160px,1fr) 96px 64px 84px 100px 100px;
+  align-items:center;gap:0 10px;padding:12px 14px}
+details.sec summary::-webkit-details-marker{display:none}
+details.sec summary:hover{background:#eff6ff}
+details.sec summary .arrow{color:#2563eb;transition:transform .25s ease}
+details.sec[open ] summary .arrow{transform:rotate(90deg)}
+details.sec summary .road{font-weight:700;color:#111827;font-size:15px}
+details.sec summary .pile{color:#4b5563;font-size:14px}
+details.sec summary .mi,details.sec summary .ln,details.sec summary .gq,
+details.sec summary .br,details.sec summary .tl{font-size:14px;color:#374151;white-space:nowrap}
+details.sec[open ] summary{border-bottom:1px solid #e5e7eb}
+details.sec .body{padding:12px 16px 14px;animation:fadeIn .3s ease-out}
+details.sec .body dl{display:grid;grid-template-columns:130px 1fr;gap:4px 12px;margin:0;font-size:14px}
+details.sec .body dt{color:#6b7280}
+details.sec .body dd{margin:0;color:#111827}
+@keyframes rowIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+@media (prefers-reduced-motion: reduce){details.sec{animation:none}details.sec .body{animation:none}details.sec summary .arrow{transition:none}}
 .note{color:#6b7280;font-size:13px}
 input,textarea,select{padding:8px 10px;margin:4px 0;border:1px solid #d1d5db;
   border-radius:8px;background:#fff;font-size:14px}

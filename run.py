@@ -88,26 +88,67 @@ def esc(value):
     return html.escape(str(value or ""))
 
 
+def _section_block(i, s):
+    # 折叠路段行：标题行 8 列对齐（见 render.py .sec），点开显示本段详情；
+    # name='sec' 让 8 段一次只展开一个；纯 HTML details/summary，不用 JS。
+    bridges_n = s["bridges"].split("座")[0]
+    tolls_n = len(s["tolls"].split("、"))
+    rows = [
+        ("桩号", s["stake"]),
+        ("管养里程", f"{s['mileage']} 公里"),
+    ]
+    if s.get("deducted"):
+        rows.append(("扣除桥隧等后里程", f"{s['deducted']:.3f} 公里"))
+    if s.get("opened"):
+        rows.append(("通车时间", s["opened"]))
+    if s.get("inspected"):
+        rows.append(("定检时间", s["inspected"]))
+    rows.append(("双幅车道数", str(s["lanes"]) if s.get("lanes") else "—"))
+    rows.append(("工区", s["gongqu"]))
+    if s.get("note"):
+        rows.append(("备注", s["note"]))
+    rows += [
+        ("桥梁", s.get("bridges") or "—"),
+        ("特大桥", s.get("mega_bridges") or "无"),
+        ("服务区", s.get("services") or "无"),
+        ("停车区", s.get("parking") or "无"),
+        ("收费站", s.get("tolls") or "无"),
+    ]
+    body = "".join(f"<dt>{esc(k)}</dt><dd>{esc(v)}</dd>" for k, v in rows)
+    return (
+        f"<details class='sec' name='sec' style='animation-delay:{i * 0.07:.2f}s'>"
+        "<summary>"
+        "<span class='arrow'>▸</span>"
+        f"<span class='road'>{esc(s['road'])}</span>"
+        f"<span class='pile'>{esc(s['stake'])}</span>"
+        f"<span class='mi'>{s['mileage']} 公里</span>"
+        f"<span class='ln'>{s['lanes']} 车道</span>"
+        f"<span class='gq'>{esc(s['gongqu'])}</span>"
+        f"<span class='br'>桥梁 {bridges_n} 座</span>"
+        f"<span class='tl'>收费站 {tolls_n} 座</span>"
+        "</summary>"
+        f"<div class='body'><dl>{body}</dl></div>"
+        "</details>")
+
+
 def home_body():
-    cards = "".join(
-        f"<div class='seccard' style='border:1px solid #ccc;border-radius:8px;padding:12px;"
-        f"margin:8px;display:inline-block;vertical-align:top;width:280px;"
-        f"animation-delay:{i * 0.07:.2f}s'>"
-        f"<b>{esc(s['road'])}</b><br>桩号：{esc(s['stake'])}<br>"
-        + (f"管养里程：{s['mileage']} 公里<br>" if s["mileage"] else "")
-        + (f"扣除桥隧等后里程：{s['deducted']:.3f} 公里<br>" if s.get("deducted") else "")
-        + (f"通车时间：{esc(s['opened'])}<br>" if s.get("opened") else "")
-        + (f"定检时间：{esc(s['inspected'])}<br>" if s.get("inspected") else "")
-        + (f"双幅车道数：{s['lanes']}<br>" if s.get("lanes") else "")
-        + f"工区：{esc(s['gongqu'])}"
-        + (f"<br>备注：{esc(s['note'])}" if s.get("note") else "")
-        + f"<br>桥梁：{esc(s.get('bridges') or '—')}"
-        + f"<br>特大桥：{esc(s.get('mega_bridges') or '无')}"
-        + f"<br>服务区：{esc(s.get('services') or '无')}"
-        + f"<br>停车区：{esc(s.get('parking') or '无')}"
-        + f"<br>收费站：{esc(s.get('tolls') or '无')}"
-        + "</div>"
-        for i, s in enumerate(overview.SECTIONS))
+    # 总览条数字从 SECTIONS 现算，与 overview.FACILITIES_NOTE 里的合计保持一致；改数据时两处一起改。
+    bridges_total = sum(int(s["bridges"].split("座")[0]) for s in overview.SECTIONS)
+    mega_total = sum(len(s["mega_bridges"].split("、")) for s in overview.SECTIONS if s.get("mega_bridges"))
+    services_total = sum(len(s["services"].split("、")) for s in overview.SECTIONS if s.get("services"))
+    parking_total = sum(len(s["parking"].split("、")) for s in overview.SECTIONS if s.get("parking"))
+    tolls_total = sum(len(s["tolls"].split("、")) for s in overview.SECTIONS)
+    stats = (
+        "<div class='stats'>"
+        f"<div class='stat'><b>{overview.TOTAL_MILEAGE_KM} 公里</b><span>管养里程</span></div>"
+        f"<div class='stat'><b>{len(overview.SECTIONS)} 个</b><span>路段</span></div>"
+        f"<div class='stat'><b>{bridges_total} 座</b><span>桥梁（特大桥 {mega_total} 座）</span></div>"
+        f"<div class='stat'><b>{services_total} 座</b><span>服务区</span></div>"
+        f"<div class='stat'><b>{parking_total} 处</b><span>停车区</span></div>"
+        f"<div class='stat'><b>{tolls_total} 座</b><span>收费站</span></div>"
+        f"<div class='stat'><b>{overview.CULVERT_TOTAL} 座</b><span>涵洞</span></div>"
+        "</div>")
+    sections = "".join(_section_block(i, s) for i, s in enumerate(overview.SECTIONS))
     culverts = "、".join(f"{esc(name)} {count}" for name, count in overview.CULVERT_BY_ROAD)
     culvert_line = (f"<p class='note'>涵洞：安阳分公司共 {overview.CULVERT_TOTAL} 座"
                     f"（{culverts}）。</p>")
@@ -146,7 +187,8 @@ def home_body():
         f"<h2>安阳驻地办 · 工程概括</h2>"
         f"<p class='note'>安阳分公司管养里程 {overview.TOTAL_MILEAGE_KM} 公里。</p>"
         + map_block
-        + f"<h3>各路段概括</h3>{cards}"
+        + stats
+        + f"<h3>各路段概括</h3>{sections}"
         + culvert_line
         + f"<p class='note'>{esc(overview.FACILITIES_NOTE)}</p>"
         + f"<h3>工区对照</h3><p>{lines}</p>"
