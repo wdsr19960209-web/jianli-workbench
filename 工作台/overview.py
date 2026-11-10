@@ -46,7 +46,7 @@ SECTIONS = [
      "deducted": 11.590, "gongqu": "林州工区", "opened": "2024年12月", "lanes": 4,
      "note": "缺陷责任期路段",
      "bridges": "14座（主线桥9座含特大桥1座、匝道桥5座）",
-     "mega_bridges": "万宝山特大桥（桩号未报）",
+     "mega_bridges": "万宝山特大桥 K4+091",
      "tolls": "青年洞 K10+360"},
     {"road": "S33沿太行高速南段", "stake": "K41+648-K83+733", "mileage": 42.085,
      "deducted": 36.113, "gongqu": "林州工区", "opened": "2024年12月", "lanes": 4,
