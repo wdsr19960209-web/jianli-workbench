@@ -94,10 +94,17 @@ def home_body():
         f"margin:8px;display:inline-block;vertical-align:top;width:280px'>"
         f"<b>{esc(s['road'])}</b><br>桩号：{esc(s['stake'])}<br>"
         + (f"管养里程：{s['mileage']} 公里<br>" if s["mileage"] else "")
+        + (f"扣除桥隧等后里程：{s['deducted']:.3f} 公里<br>" if s.get("deducted") else "")
         + (f"通车时间：{esc(s['opened'])}<br>" if s.get("opened") else "")
+        + (f"定检时间：{esc(s['inspected'])}<br>" if s.get("inspected") else "")
         + (f"双幅车道数：{s['lanes']}<br>" if s.get("lanes") else "")
-        + f"工区：{esc(s['gongqu'])}</div>"
+        + f"工区：{esc(s['gongqu'])}"
+        + (f"<br>备注：{esc(s['note'])}" if s.get("note") else "")
+        + "</div>"
         for s in overview.SECTIONS)
+    culverts = "、".join(f"{esc(name)} {count}" for name, count in overview.CULVERT_BY_ROAD)
+    culvert_line = (f"<p class='note'>涵洞：安阳分公司共 {overview.CULVERT_TOTAL} 座"
+                    f"（{culverts}）。</p>")
     lines = "<br>".join(esc(x) for x in overview.GONGQU_LINES)
     map_file = os.path.join(BASE, "管养路段示意图.png")
     if os.path.exists(map_file):
@@ -134,6 +141,7 @@ def home_body():
         f"<p class='note'>安阳分公司管养里程 {overview.TOTAL_MILEAGE_KM} 公里。</p>"
         + map_block
         + f"<h3>各路段概括</h3>{cards}"
+        + culvert_line
         + f"<h3>工区对照</h3><p>{lines}</p>"
         + contacts_block)
 
