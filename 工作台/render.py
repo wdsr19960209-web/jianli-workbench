@@ -28,11 +28,22 @@ th{background:#f8fafc;color:#374151;font-weight:600}
 table.grid{border-radius:0}
 table.grid th,table.grid td{border:1px solid #cbd5e1}
 tr:hover{background:#f9fafb}
+/* 首页路段卡片动效（motion-prompt #081 悬停上浮、#074 淡入上浮，手写纯 CSS，不引外部文件）：
+   悬停上浮 10px / 0.3s ease-out，阴影 blur 6→22、y 2→12、透明度 .08→.22；
+   入场 0.7s ease-out，透明度 0→1、从下方 28px 升起，逐张延迟 0.07s。
+   animation 用 backwards 填充：动画结束后不占 transform，悬停上浮才生效。 */
+.seccard{box-shadow:0 2px 6px rgba(28,35,51,.08);
+  transition:transform .3s cubic-bezier(.22,1,.36,1),box-shadow .3s cubic-bezier(.22,1,.36,1);
+  animation:cardIn .7s cubic-bezier(.22,1,.36,1) backwards}
+.seccard:hover{transform:translateY(-10px);box-shadow:0 12px 22px rgba(28,35,51,.22)}
+@keyframes cardIn{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+@media (prefers-reduced-motion: reduce){.seccard{animation:none;transition:none}}
 .note{color:#6b7280;font-size:13px}
 input,textarea,select{padding:8px 10px;margin:4px 0;border:1px solid #d1d5db;
   border-radius:8px;background:#fff;font-size:14px}
 input[type=submit],button{padding:8px 16px;border:none;border-radius:8px;
-  background:#2563eb;color:#fff;cursor:pointer;font-size:14px}
+  background:#2563eb;color:#fff;cursor:pointer;font-size:14px;
+  transition:background-color .2s}
 input[type=submit]:hover,button:hover{background:#1d4ed8}
 button:disabled{background:#9ca3af;cursor:default}
 pre{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:14px;overflow:auto}

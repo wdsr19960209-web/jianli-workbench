@@ -90,8 +90,9 @@ def esc(value):
 
 def home_body():
     cards = "".join(
-        f"<div style='border:1px solid #ccc;border-radius:8px;padding:12px;"
-        f"margin:8px;display:inline-block;vertical-align:top;width:280px'>"
+        f"<div class='seccard' style='border:1px solid #ccc;border-radius:8px;padding:12px;"
+        f"margin:8px;display:inline-block;vertical-align:top;width:280px;"
+        f"animation-delay:{i * 0.07:.2f}s'>"
         f"<b>{esc(s['road'])}</b><br>桩号：{esc(s['stake'])}<br>"
         + (f"管养里程：{s['mileage']} 公里<br>" if s["mileage"] else "")
         + (f"扣除桥隧等后里程：{s['deducted']:.3f} 公里<br>" if s.get("deducted") else "")
@@ -106,7 +107,7 @@ def home_body():
         + f"<br>停车区：{esc(s.get('parking') or '无')}"
         + f"<br>收费站：{esc(s.get('tolls') or '无')}"
         + "</div>"
-        for s in overview.SECTIONS)
+        for i, s in enumerate(overview.SECTIONS))
     culverts = "、".join(f"{esc(name)} {count}" for name, count in overview.CULVERT_BY_ROAD)
     culvert_line = (f"<p class='note'>涵洞：安阳分公司共 {overview.CULVERT_TOTAL} 座"
                     f"（{culverts}）。</p>")
