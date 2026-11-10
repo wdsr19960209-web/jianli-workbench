@@ -100,6 +100,11 @@ def home_body():
         + (f"双幅车道数：{s['lanes']}<br>" if s.get("lanes") else "")
         + f"工区：{esc(s['gongqu'])}"
         + (f"<br>备注：{esc(s['note'])}" if s.get("note") else "")
+        + f"<br>桥梁：{esc(s.get('bridges') or '—')}"
+        + f"<br>特大桥：{esc(s.get('mega_bridges') or '无')}"
+        + f"<br>服务区：{esc(s.get('services') or '无')}"
+        + f"<br>停车区：{esc(s.get('parking') or '无')}"
+        + f"<br>收费站：{esc(s.get('tolls') or '无')}"
         + "</div>"
         for s in overview.SECTIONS)
     culverts = "、".join(f"{esc(name)} {count}" for name, count in overview.CULVERT_BY_ROAD)
@@ -142,6 +147,7 @@ def home_body():
         + map_block
         + f"<h3>各路段概括</h3>{cards}"
         + culvert_line
+        + f"<p class='note'>{esc(overview.FACILITIES_NOTE)}</p>"
         + f"<h3>工区对照</h3><p>{lines}</p>"
         + contacts_block)
 
